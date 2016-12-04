@@ -1,0 +1,179 @@
+//
+// Canopy product code
+//
+// (C) Copyright 2015 Enthought, Inc., Austin, TX
+// All right reserved.
+//
+// This file is confidential and NOT open source.  Do not distribute.
+
+define(["require", "jquery", "base/js/namespace", "base/js/events", "notebook/js/celltoolbar"],
+function (require, $, IPython, events, celltoolbar) {
+    "use strict";
+
+    var load_exercise_handler = function() {
+
+        // Add a new object to the main IPython object to hold our toggle functions
+        IPython.canopy_exercise = {
+            'find_cell': function find_cell(elem) {
+                // Find the IPython cell data given an element within the cell.
+                var data = null;
+                while (elem) {
+                    data = elem.data('cell');
+                    if (data) {
+                        return {element:elem, data:data};
+                    }
+                    elem = elem.parent();
+                }
+            },
+
+            // Run through all cells to find those associated with solution n,
+            // then toggle the visibility of its element
+            'toggle_solution': function(n) {
+                var cells = IPython.notebook.get_cells();
+                for (var i in cells) {
+                    var cell = cells[i];
+                    if ("canopy_exercise" in cell.metadata) {
+                        if (cell.metadata.canopy_exercise.cell_type == 'solution_view' &&
+                                cell.metadata.canopy_exercise.solution_number == n) {
+                            cell.element.toggle();
+                        }
+                    }
+                }
+            },
+
+            // Run through all cells to find those associated with hint n,
+            // then toggle the visibility of its element
+            'toggle_hint': function(n) {
+                var cells = IPython.notebook.get_cells();
+                for (var i in cells) {
+                    var cell = cells[i];
+                    if ('canopy_exercise' in cell.metadata) {
+                        if (cell.metadata.canopy_exercise.cell_type == 'hint_view' &&
+                                cell.metadata.canopy_exercise.hint_number == n) {
+                            cell.element.toggle();
+                        }
+                    }
+                }
+            },
+
+            // Run though all cells to find solutions and hints,
+            // then hide of the associated element
+            'hide_all': function() {
+                var cells = IPython.notebook.get_cells();
+                for (var i in cells) {
+                    var cell = cells[i];
+                    if ("canopy_exercise" in cell.metadata) {
+                        if (cell.metadata.canopy_exercise.cell_type == 'solution_view' ||
+                                cell.metadata.canopy_exercise.cell_type == 'hint_view') {
+                            console.log('Hiding cell '+i);
+                            cell.element.hide();
+                        }
+                    }
+                }
+            },
+
+            // Run though all cells to find solutions and hints,
+            // then show the associated element
+            'show_all': function() {
+                var cells = IPython.notebook.get_cells();
+                for (var i in cells) {
+                    var cell = cells[i];
+                    if ("canopy_exercise" in cell.metadata) {
+                        if (cell.metadata.canopy_exercise.cell_type == 'solution_view' ||
+                                cell.metadata.canopy_exercise.cell_type == 'hint_view') {
+                            console.log('Hiding cell '+i);
+                            cell.element.show();
+                        }
+                    }
+                }
+            },
+        };
+
+
+        var load_ext = function() {
+            console.log('Notebook loaded');
+            IPython.canopy_exercise.hide_all();
+
+            // The code below is for handling clicking of solution/hint
+            // button in IPython 2 whose security features prevent execution
+            // of javascript in markdown cells
+            var nb_element = IPython.notebook.element;
+            var regex = "onclick=\"IPython\\.canopy_exercise\\.(toggle_solution|toggle_hint)\\(\\'(\\d+)\\'\\)\"";
+
+            nb_element.on('click', '.inner_cell button', function(event){
+                var elem = event.target;
+                if (elem.onclick) {
+                    // Older version, onclick handler not removed
+                } else {
+                    // onclick handler removed for security considerations
+                    // http://ipython.org/ipython-doc/2/notebook/security.html#javascript-and-css-in-markdown-cells
+                    var cell = IPython.canopy_exercise.find_cell($(elem));
+                    if (cell && cell.data.metadata.canopy_exercise &&
+                            cell.data.metadata.canopy_exercise.cell_type.match("hint_button|solution_button")) {
+                        var text = cell.data.get_text();
+                        var match = text.match(regex);
+
+                        if (match) {
+                            var method = match[1];
+                            var arg = parseInt(match[2]);
+                            IPython.canopy_exercise[method](arg);
+                        }
+                    }
+                }
+            });
+        };
+        load_ext();
+        // Precaution in case Notebook is not loaded yet.
+        events.on('notebook_loaded.Notebook', load_ext);
+
+        console.log('Canopy exercise extensions to IPython bound.');
+    };
+
+
+    var load_exercise_toolbar = function(){
+        var CellToolbar = celltoolbar.CellToolbar;
+        var exercise_preset = [];
+
+        var select_exercise = CellToolbar.utils.select_ui_generator([
+                ["<None>", undefined],
+                ["Question", "question"],
+                ["Hint", "hint"],
+                ["Starting Code", "starting code"],
+                ["Solution", "solution"],
+            ],
+            // setter
+            function(cell, value){
+                // we check that the slideshow namespace exist and create it if needed
+                if (cell.metadata.canopy_exercise == undefined){
+                    cell.metadata.canopy_exercise = {}
+                }
+                // set the value
+                cell.metadata.canopy_exercise.cell_type = value;
+            },
+            //getter
+            function(cell){
+                var ns = cell.metadata.canopy_exercise;
+                // if the canopy_exercise namespace does not exist return `undefined`
+                // (will be interpreted as `false` by checkbox) otherwise
+                // return the value
+                return (ns == undefined)? undefined: ns.cell_type
+            }
+        );
+        CellToolbar.register_callback('exercise.select', select_exercise);
+        exercise_preset.push('exercise.select');
+
+        CellToolbar.register_preset('Exercise',exercise_preset);
+        console.log('Extension for metadata editing of Canopy exercises loaded.');
+
+    };
+
+    var load_ipython_extension = function(){
+        load_exercise_handler();
+        load_exercise_toolbar();
+    };
+
+    var extension = {
+        load_ipython_extension : load_ipython_extension
+    };
+    return extension;
+});
